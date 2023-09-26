@@ -1,11 +1,11 @@
 from function.register_style.function_register_style import Pyflow
+import pyflow_functions
 import inspect
 
 pf = Pyflow()
+pfn = pyflow_functions.PyflowFn(pf)
 
-# You can register a function, class, file, or directory
-print(pf.functions)
+# Add way to inspect the function code
 
-print(inspect.getsource(pf.function("step1")))
-df = pf.function("step2")(pf.function("step1")(1, 2))
+df = pfn.step2(pfn.step1(1, 2))
 print(df)

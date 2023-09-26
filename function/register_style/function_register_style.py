@@ -10,6 +10,9 @@ The issue with this is that pickling the function is not very human readable. To
 you would need to store the function itself, which is not very human readable.  You could also store
 the function name and the arguments that were passed to it, but this is not very robust.  You could
 also store the function name and the hash of the function, but this is not very human readable either.
+
+Another problem here is that when you call a function, there is no autocomplete for the arguments.
+So you have to know what the arguments are before you call the function. This is not very user friendly.
 """
 
 
@@ -17,14 +20,24 @@ class Pyflow:
     path = f"{Path.home()}/.pyflow"
 
     def __init__(self):
-        self.functions = set(self._load_functions())
+        pass
 
-    def _load_functions(self):
+    def load_functions(self):
         if not os.path.exists(f"{self.path}/functions"):
             os.makedirs(f"{self.path}/functions")
-        # The editor sadly does not autocomplete these loaded functions
-        # [self.__setattr__(func, self.load_function(func)) for func in os.listdir(f"{self.path}/functions")]
-        return os.listdir(f"{self.path}/functions")
+
+        # TODO: add typing and doc strings
+        function_module = "class PyflowFn:\n"
+        function_module += "    def __init__(self, pf):\n"
+        function_module += "        self.pf = pf\n\n"
+
+        for func in os.listdir(f"{self.path}/functions"):
+            metadata = json.loads(open(f"{self.path}/functions/{func}", "r").read())
+            variables = metadata["variables"]
+
+            function_module += f"    def {func}({', '.join(['self'] + variables)}):\n"
+            function_module += f"        return self.pf.function('{func}')({', '.join(variables)})\n\n"
+        open("pyflow_functions.py", "w").write(function_module)
 
     def register(self, func):
         print(f"Registering variables: {func.__code__.co_varnames}")
@@ -34,8 +47,6 @@ class Pyflow:
         }
 
         open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
-        # TODO: Add a check to see if the function is already registered
-        self.functions.add(func.__name__)
 
     def function(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())
