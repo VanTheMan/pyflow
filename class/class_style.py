@@ -1,6 +1,19 @@
 from utils import RunTime, Container, Resources
 from abc import ABC, abstractmethod
 
+"""
+The down side with class style is that it is very verbose and requires a lot of boilerplate code.
+Some if it could potentially be handled with decorators.
+
+Another thing to consider is how the provenance is stored.  If you want to store the provenance
+of the function, you need to store the function itself.  This can be done with cloudpickle, but
+it is not a very human readable format.  You could also store the function name and the arguments
+that were passed to it, but this is not very robust.  You could also store the function name and
+the hash of the function, but this is not very human readable either.
+
+
+"""
+
 class Job(ABC):
 
     def __init__(self,

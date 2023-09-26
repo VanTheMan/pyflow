@@ -1,5 +1,11 @@
-def step(unwrapped_step):
+"""
+The issue with the decorator style is that you cannot register the steps/functions
+without executing them. This is because the decorator is executed at
+runtime.
+"""
 
+
+def step(unwrapped_step):
     def wrapped_step(*args):
         print("Hello, this is before function execution")
 
@@ -24,7 +30,6 @@ def step1(x, y):
 def step2(step1_output):
     print(step1_output)
     return 2
-
 
 # step2_output = step2(step1(1, 2))
 # step2_output.execute()

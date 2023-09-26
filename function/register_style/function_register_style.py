@@ -4,6 +4,14 @@ import os
 from pathlib import Path
 import codecs
 
+"""
+The benefit of this style is that you can register the functions without executing them.
+The issue with this is that pickling the function is not very human readable. To establish provenance,
+you would need to store the function itself, which is not very human readable.  You could also store
+the function name and the arguments that were passed to it, but this is not very robust.  You could
+also store the function name and the hash of the function, but this is not very human readable either.
+"""
+
 
 class Pyflow:
     path = f"{Path.home()}/.pyflow"
@@ -14,9 +22,11 @@ class Pyflow:
     def _load_functions(self):
         if not os.path.exists(f"{self.path}/functions"):
             os.makedirs(f"{self.path}/functions")
+        # The editor sadly does not autocomplete these loaded functions
+        # [self.__setattr__(func, self.load_function(func)) for func in os.listdir(f"{self.path}/functions")]
         return os.listdir(f"{self.path}/functions")
 
-    def register_function(self, func):
+    def register(self, func):
         print(f"Registering variables: {func.__code__.co_varnames}")
         metadata = {
             "variables": func.__code__.co_varnames,
@@ -27,27 +37,10 @@ class Pyflow:
         # TODO: Add a check to see if the function is already registered
         self.functions.add(func.__name__)
 
-    def load_function(self, func_name):
+    def function(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
         return func
 
-
-def step1(x: int, y: int):
-    print(f"step {x} {y}")
-    return 1
-
-
-def step2(step1_output):
-    print(step1_output)
-    return 2
-
-
-pf = Pyflow()
-
-pf.register_function(step1)
-pf.register_function(step2)
-# You can register a function, class, file, or directory
-
-print(pf.functions)
-pf.load_function("step1")(1, 2)
+    def register_module(self, module):
+        cloudpickle.register_pickle_by_value(module)
