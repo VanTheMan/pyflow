@@ -13,6 +13,9 @@ also store the function name and the hash of the function, but this is not very 
 
 Another problem here is that when you call a function, there is no autocomplete for the arguments.
 So you have to know what the arguments are before you call the function. This is not very user friendly.
+
+Another problem with he pickle approach is that you don't knw the output format. Making it hard to pass
+variables along.  You could store the output format in the metadata, but this is not very robust.
 """
 
 
