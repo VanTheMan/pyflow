@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import codecs
+import inspect
 
 """
 The benefit of this style is that you can register the functions without executing them.
@@ -37,8 +38,10 @@ class Pyflow:
         for func in os.listdir(f"{self.path}/functions"):
             metadata = json.loads(open(f"{self.path}/functions/{func}", "r").read())
             variables = metadata["variables"]
+            signature = metadata["signature"]
+            signature = "(self, " + signature[1::]
 
-            function_module += f"    def {func}({', '.join(['self'] + variables)}):\n"
+            function_module += f"    def {func}{signature}:\n"
             function_module += f"        return self.pf.function('{func}')({', '.join(variables)})\n\n"
         open("pyflow_functions.py", "w").write(function_module)
 
@@ -46,6 +49,7 @@ class Pyflow:
         print(f"Registering variables: {func.__code__.co_varnames}")
         metadata = {
             "variables": func.__code__.co_varnames,
+            "signature": str(inspect.signature(func)),
             "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
         }
 
