@@ -1,3 +1,5 @@
+import copy
+
 import cloudpickle
 import json
 import os
@@ -5,6 +7,7 @@ from pathlib import Path
 import codecs
 import inspect
 import hashlib
+from utils import RunTime, Container, Resources
 
 """
 The benefit of this style is that you can register the functions without executing them.
@@ -52,6 +55,7 @@ class Pyflow:
         for func in os.listdir(f"{self.path}/functions"):
             metadata = json.loads(open(f"{self.path}/functions/{func}", "r").read())
             variables = metadata["variables"]
+            outer_vars = copy.deepcopy(variables)
             signature = metadata["signature"]
             is_kwarg = metadata["is_kwarg"]
 
@@ -67,17 +71,22 @@ class Pyflow:
                 for i, k in enumerate(is_kwarg):
                     if k:
                         variables[i] += "=None"
+                        outer_vars[i] += f"={outer_vars[i]}"
                     if variables[i] == "args":
-                        variables[i] = "*args"
+                        outer_vars[i] = variables[i] = "*args"
                     if variables[i] == "kwargs":
-                        variables[i] = "**kwargs"
+                        outer_vars[i] = variables[i] = "**kwargs"
                 function_module += f"    def {func}({', '.join(['self'] + variables)}):\n"
                 function_module += f"        \"\"\"{func}{signature}\"\"\"\n"
 
-            function_module += f"        return self.pf.function('{func}')({', '.join(variables)})\n\n"
+            function_module += f"        return self.pf.fn('{func}')({', '.join(outer_vars)})\n\n"
         open(path, "w").write(function_module)
 
-    def register(self, func):
+    def register(self,
+                 func,
+                 runtime: RunTime = None,
+                 container: Container = None,
+                 resources: Resources = None):
         print(f"Registering variables: {func.__code__.co_varnames}")
         signature = inspect.signature(func)
         params = signature.parameters
@@ -92,7 +101,7 @@ class Pyflow:
         }
         open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
 
-    def function(self, func_name):
+    def fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
         return func
