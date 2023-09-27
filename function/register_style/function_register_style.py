@@ -33,7 +33,9 @@ class Pyflow:
         """
         This function will load all the functions in the functions directory and create a module.
         This module will have a class called PyflowFn. This class will have a function for each
-        function in the functions directory.
+        function in the functions directory. Note that it is possible for this file to get
+        out of sync with the functions directory. So it is the user's reposibility to make sure
+        that the functions directory and the module are in sync.
 
         :param annotate: Should the function be annotated with the type hints? If they are included,
             you will have to import the modules used in the annotations yourself.
