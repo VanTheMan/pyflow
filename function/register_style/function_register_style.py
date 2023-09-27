@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import codecs
 import inspect
+import hashlib
 
 """
 The benefit of this style is that you can register the functions without executing them.
@@ -17,6 +18,8 @@ So you have to know what the arguments are before you call the function. This is
 
 Another problem with he pickle approach is that you don't knw the output format. Making it hard to pass
 variables along.  You could store the output format in the metadata, but this is not very robust.
+
+Another problem is that not all code can be pickled. You might run into an issue where you cannot use it.
 """
 
 
@@ -26,11 +29,20 @@ class Pyflow:
     def __init__(self):
         pass
 
-    def load_functions(self):
+    def load_functions(self, annotate=False, path="pyflow_functions.py"):
+        """
+        This function will load all the functions in the functions directory and create a module.
+        This module will have a class called PyflowFn. This class will have a function for each
+        function in the functions directory.
+
+        :param annotate: Should the function be annotated with the type hints? If they are included,
+            you will have to import the modules used in the annotations yourself.
+        :param path: Where should the module be saved?
+        :return:
+        """
         if not os.path.exists(f"{self.path}/functions"):
             os.makedirs(f"{self.path}/functions")
 
-        # TODO: add typing and doc strings
         function_module = "class PyflowFn:\n"
         function_module += "    def __init__(self, pf):\n"
         function_module += "        self.pf = pf\n\n"
@@ -39,20 +51,43 @@ class Pyflow:
             metadata = json.loads(open(f"{self.path}/functions/{func}", "r").read())
             variables = metadata["variables"]
             signature = metadata["signature"]
-            signature = "(self, " + signature[1::]
+            is_kwarg = metadata["is_kwarg"]
 
-            function_module += f"    def {func}{signature}:\n"
+            if annotate:
+                signature = "(self, " + signature[1::]
+                # Signature includes the type annotations. This means that you will have to import
+                # the modules used in the annotations. The environment you are working in won't
+                # necessarily have those packages installed.
+                function_module += f"    def {func}{signature}:\n"
+            else:
+                # All keyword args with default values are set to None. This is because you cannot
+                # guarantee that the default type will be available in the environment you are in.
+                for i, k in enumerate(is_kwarg):
+                    if k:
+                        variables[i] += "=None"
+                    if variables[i] == "args":
+                        variables[i] = "*args"
+                    if variables[i] == "kwargs":
+                        variables[i] = "**kwargs"
+                function_module += f"    def {func}({', '.join(['self'] + variables)}):\n"
+                function_module += f"        \"\"\"{func}{signature}\"\"\"\n"
+
             function_module += f"        return self.pf.function('{func}')({', '.join(variables)})\n\n"
-        open("pyflow_functions.py", "w").write(function_module)
+        open(path, "w").write(function_module)
 
     def register(self, func):
         print(f"Registering variables: {func.__code__.co_varnames}")
+        signature = inspect.signature(func)
+        params = signature.parameters
         metadata = {
+            "code": inspect.getsource(func),
+            "sha256": hashlib.sha256(inspect.getsource(func).encode()).hexdigest(),
+            "signature": str(signature),
             "variables": func.__code__.co_varnames,
-            "signature": str(inspect.signature(func)),
+            "annotations": str(func.__annotations__),
+            "is_kwarg": [str(params[param].default) != "<class 'inspect._empty'>" for param in params],
             "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
         }
-
         open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
 
     def function(self, func_name):

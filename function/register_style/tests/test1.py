@@ -1,5 +1,3 @@
-import cloudpickle
-
 from function.register_style.function_register_style import Pyflow
 import pandas as pd
 import some_module
@@ -7,7 +5,7 @@ import some_module
 pf = Pyflow()
 
 
-def step1(x: int, y: int) -> pd.DataFrame:
+def step1(x: int, y: int, z=1, *args, **kwargs) -> pd.DataFrame:
     print(f"step {x} {y}")
     some_module.plus(x, y)
     return pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]})
