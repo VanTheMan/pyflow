@@ -1,34 +1,26 @@
-class PythonVersion:
-    v3_11 = "3.11"
-    v3_10 = "3.10"
-    v3_9 = "3.9"
-    v3_8 = "3.8"
+from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-class RunTime:
-
-    def __init__(self,
-                 python_version: PythonVersion,
-                 requirements: list[str],
-                 gpu: bool = False):
-        self.python_version = python_version
-        self.requirements = requirements
-        self.gpu = gpu
+class PythonVersion(BaseModel):
+    v3_11: str = "3.11"
+    v3_10: str = "3.10"
+    v3_9: str = "3.9"
+    v3_8: str = "3.8"
 
 
-class Container:
-
-    def __init__(self,
-                 image: str,
-                 tag: str):
-        self.image = image
-        self.tag = tag
+class RunTime(BaseModel):
+    python_version: PythonVersion
+    conda_dependencies: list[str]
+    pip_dependencies: list[str]
+    gpu: bool
 
 
-class Resources:
+class Container(BaseModel):
+    image: str
+    tag: str
 
-    def __init__(self,
-                 cpu: str,
-                 mem: str):
-        self.cpu = cpu
-        self.mem = mem
+
+class Resources(BaseModel):
+    cpu: str
+    mem: str

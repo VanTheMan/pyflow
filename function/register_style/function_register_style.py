@@ -82,6 +82,29 @@ class Pyflow:
             function_module += f"        return self.pf.fn('{func}')({', '.join(outer_vars)})\n\n"
         open(path, "w").write(function_module)
 
+    @staticmethod
+    def build_conda_yml(runtime: RunTime, path="environment.yml"):
+        env = "name: pyflow_env\n"
+        env += "dependencies:\n"
+        env += f"  - python={runtime.python_version}\n"
+        for dep in runtime.conda_dependencies:
+            env += f"  - {dep}\n"
+
+        env += "  - pip\n"
+        for dep in runtime.pip_dependencies:
+            env += f"    - {dep}\n"
+
+        open(path, "w").write(env)
+
+    def build_image(self, runtime: RunTime):
+        """
+        FROM continuumio/miniconda3
+        ADD environment.yml /tmp/environment.yml
+        RUN conda env create -f /tmp/environment.yml
+        RUN echo "source activate env" > ~/.bashrc
+        ENV PATH /opt/conda/envs/env/bin:$PATH
+        """
+
     def register(self,
                  func,
                  runtime: RunTime = None,
@@ -98,8 +121,14 @@ class Pyflow:
             "annotations": str(func.__annotations__),
             "is_kwarg": [str(params[param].default) != "<class 'inspect._empty'>" for param in params],
             "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
+            "runtime": runtime.model_dump(),
+            "container": container.model_dump(),
+            "resources": resources.model_dump()
         }
         open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
+
+        if runtime:
+            self.build_image(runtime)
 
     def fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())
