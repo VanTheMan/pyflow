@@ -84,26 +84,36 @@ class Pyflow:
 
     @staticmethod
     def build_conda_yml(runtime: RunTime, path="environment.yml"):
-        env = "name: pyflow_env\n"
+        env = "name: env\n"
         env += "dependencies:\n"
-        env += f"  - python={runtime.python_version}\n"
+        env += f"  - python={runtime.python_version.value}\n"
         for dep in runtime.conda_dependencies:
             env += f"  - {dep}\n"
 
         env += "  - pip\n"
+        env += "  - pip:\n"
         for dep in runtime.pip_dependencies:
             env += f"    - {dep}\n"
 
         open(path, "w").write(env)
 
-    def build_image(self, runtime: RunTime):
-        """
-        FROM continuumio/miniconda3
-        ADD environment.yml /tmp/environment.yml
-        RUN conda env create -f /tmp/environment.yml
-        RUN echo "source activate env" > ~/.bashrc
-        ENV PATH /opt/conda/envs/env/bin:$PATH
-        """
+    @staticmethod
+    def build_dockerfile(container: Container, path="Dockerfile"):
+        dockerfile = f"FROM {container.image}:{container.tag}\n"
+        dockerfile += "ADD environment.yml /tmp/environment.yml\n"
+        dockerfile += "RUN conda env create -f /tmp/environment.yml\n"
+        dockerfile += "RUN echo \"source activate env\" > ~/.bashrc\n"
+        dockerfile += "ENV PATH /opt/conda/envs/env/bin:$PATH\n"
+        open(path, "w").write(dockerfile)
+
+    # def build_image(self, runtime: RunTime):
+    #     """
+    #     FROM continuumio/miniconda3
+    #     ADD environment.yml /tmp/environment.yml
+    #     RUN conda env create -f /tmp/environment.yml
+    #     RUN echo "source activate env" > ~/.bashrc
+    #     ENV PATH /opt/conda/envs/env/bin:$PATH
+    #     """
 
     def register(self,
                  func,

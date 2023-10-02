@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from pydantic import BaseModel
+import enum
 
-
-class PythonVersion(BaseModel):
+class PythonVersion(enum.Enum):
     v3_11: str = "3.11"
     v3_10: str = "3.10"
     v3_9: str = "3.9"
@@ -10,15 +10,15 @@ class PythonVersion(BaseModel):
 
 
 class RunTime(BaseModel):
-    python_version: PythonVersion
+    python_version: PythonVersion = PythonVersion.v3_11
     conda_dependencies: list[str]
     pip_dependencies: list[str]
     gpu: bool
 
 
 class Container(BaseModel):
-    image: str
-    tag: str
+    image: str = "continuumio/miniconda3"
+    tag: str = "latest"
 
 
 class Resources(BaseModel):
