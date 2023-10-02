@@ -7,6 +7,7 @@
 ```python
 docker build . -t conda
 docker run -it -v $HOME/.pyflow:/root/.pyflow conda bash
+docker run -it -v $HOME/.pyflow:/root/.pyflow pyflow_test_fn:1 python -c "from pyflow.pyflow import Pyflow; Pyflow().fn('step2')('Hello World')"
 ```
 
 # Details

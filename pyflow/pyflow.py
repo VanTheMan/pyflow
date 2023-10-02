@@ -7,7 +7,7 @@ from pathlib import Path
 import codecs
 import inspect
 import hashlib
-from config import RunTime, Container, Resources
+from pyflow.config import RunTime, Container, Resources
 
 
 class Pyflow:
@@ -81,23 +81,40 @@ class Pyflow:
 
         open(path, "w").write(env)
 
+    def create_init_script(self):
+        # Create a script that will be run when the container starts. This script will
+        # activate the conda environment, install all the requirements and then run the
+        # function.
+        pass
+
     @staticmethod
     def build_dockerfile(container: Container, path="Dockerfile"):
+        """
+        Is it necessary to build an image here...can't you just use the base image and run
+        all the necessary install instructions from a script using the command function...
+        """
         dockerfile = f"FROM {container.image}:{container.tag}\n"
+        # Use init script to install all the requirements and then run the function
+        # This means you can reuse a container for multiple runs, but will you have
+        # access to all the repos...tbd. The run will alos not be reproducable
+        # because the container will be updated with the latest packages.
         dockerfile += "ADD environment.yml /tmp/environment.yml\n"
         dockerfile += "RUN conda env create -f /tmp/environment.yml\n"
         dockerfile += "RUN echo \"source activate env\" > ~/.bashrc\n"
         dockerfile += "ENV PATH /opt/conda/envs/env/bin:$PATH\n"
+        dockerfile += "ADD $PWD/ /root/\n"
+        dockerfile += "WORKDIR /root/\n"
+        dockerfile += "RUN pip install -e .\n"
         open(path, "w").write(dockerfile)
 
-    # def build_image(self, runtime: RunTime):
-    #     """
-    #     FROM continuumio/miniconda3
-    #     ADD environment.yml /tmp/environment.yml
-    #     RUN conda env create -f /tmp/environment.yml
-    #     RUN echo "source activate env" > ~/.bashrc
-    #     ENV PATH /opt/conda/envs/env/bin:$PATH
-    #     """
+    @staticmethod
+    def build_image(image_name: str,
+                    function_version: int,
+                    runtime: RunTime,
+                    container: Container):
+        Pyflow.build_conda_yml(runtime, path="environment.yml")
+        Pyflow.build_dockerfile(container, path="Dockerfile")
+        os.system(f"docker build -t {image_name}:{function_version} .")
 
     def register(self,
                  func,
@@ -120,9 +137,6 @@ class Pyflow:
             "resources": resources.model_dump()
         }
         open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
-
-        if runtime:
-            self.build_image(runtime)
 
     def fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())

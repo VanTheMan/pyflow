@@ -8,5 +8,4 @@ rt = RunTime(
     gpu=False
 )
 
-Pyflow.build_conda_yml(rt, path="environment.yml")
-Pyflow.build_dockerfile(Container(), path="Dockerfile")
+Pyflow.build_image("pyflow_test_fn", 1, rt, Container())
