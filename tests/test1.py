@@ -1,5 +1,4 @@
-from function.register_style.function_register_style import Pyflow
-import pandas as pd
+from pyflow.pyflow import Pyflow
 import some_module
 
 pf = Pyflow()

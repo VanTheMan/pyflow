@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 from pydantic import BaseModel
 import enum
+
 
 class PythonVersion(enum.Enum):
     v3_11: str = "3.11"

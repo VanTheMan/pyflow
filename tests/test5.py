@@ -1,5 +1,5 @@
-from function.register_style.function_register_style import Pyflow
-from utils import RunTime, PythonVersion, Container
+from pyflow.pyflow import Pyflow
+from pyflow.config import RunTime, PythonVersion, Container
 
 rt = RunTime(
     python_version=PythonVersion.v3_11,

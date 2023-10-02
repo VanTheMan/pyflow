@@ -1,4 +1,4 @@
-from function.register_style.function_register_style import Pyflow
+from pyflow.pyflow import Pyflow
 import pyflow_functions
 
 pf = Pyflow()

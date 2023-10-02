@@ -8,3 +8,21 @@
 docker build . -t conda
 docker run -it -v $HOME/.pyflow:/root/.pyflow conda bash
 ```
+
+# Details
+
+
+The benefit of this style is that you can register the functions without executing them.
+The issue with this is that pickling the function is not very human readable. To establish provenance,
+you would need to store the function itself.  You could also store
+the function name and the arguments that were passed to it, but this is not very robust.  You could
+also store the function name and the hash of the function, but this is not very human readable either.
+
+Another problem here is that when you call a function, there is no autocomplete for the arguments.
+So you have to know what the arguments are before you call the function. This is not very user friendly.
+
+Another problem with he pickle approach is that you don't know the output format. Making it hard to pass
+variables along.  You could store the output format in the metadata, but this is not very robust.
+
+Another problem is that not all code can be pickled. You might run into an issue where you cannot use it.
+
