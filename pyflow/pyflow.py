@@ -24,12 +24,10 @@ class Pyflow:
     def get_conda_env_path(self, func_name=None):
         os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
         return f".pyflow/functions/{func_name}/environment.yml"
-        # return f"{self.path}/functions/{func_name}/environment.yml"
 
     def get_dockerfile_path(self, func_name=None):
         os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
         return f".pyflow/functions/{func_name}/Dockerfile"
-        # return f"{self.path}/functions/{func_name}/Dockerfile"
 
     def load_functions(self, annotate=False, path="pyflow_functions.py"):
         """
@@ -148,6 +146,10 @@ class Pyflow:
         metadata = json.loads(open(f"{self.path}/functions/{func_name}/meta.json", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
         return func
+
+    def execute(self, func_name, *args, **kwargs):
+        command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func_name} python -c \"from pyflow.pyflow import Pyflow; Pyflow().fn('{func_name}'){args}\""
+        os.system(command)
 
     def register_module(self, module):
         cloudpickle.register_pickle_by_value(module)

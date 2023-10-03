@@ -11,3 +11,4 @@ rt = RunTime(
 )
 
 pf.build_image("step1", rt, Container())
+pf.execute("step1", 1, 2, 3)
