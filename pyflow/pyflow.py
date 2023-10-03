@@ -11,17 +11,32 @@ from pyflow.config import RunTime, Container, Resources
 
 
 class Pyflow:
-    path = f"{Path.home()}/.pyflow"
 
-    def __init__(self):
-        pass
+    def __init__(self, path: str = ".pyflow"):
+        self.path = f"{Path.home()}/{path}"
+
+    def get_function_path(self, func_name=None):
+        if func_name is None:
+            return f"{self.path}/functions"
+        else:
+            return f"{self.path}/functions/{func_name}"
+
+    def get_conda_env_path(self, func_name=None):
+        os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
+        return f".pyflow/functions/{func_name}/environment.yml"
+        # return f"{self.path}/functions/{func_name}/environment.yml"
+
+    def get_dockerfile_path(self, func_name=None):
+        os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
+        return f".pyflow/functions/{func_name}/Dockerfile"
+        # return f"{self.path}/functions/{func_name}/Dockerfile"
 
     def load_functions(self, annotate=False, path="pyflow_functions.py"):
         """
         This function will load all the functions in the functions directory and create a module.
         This module will have a class called PyflowFn. This class will have a function for each
-        function in the functions directory. Note that it is possible for this file to get
-        out of sync with the functions directory. So it is the user's reposibility to make sure
+        function in the function directory. Note that it is possible for this file to get
+        out of sync with the function directory. So it is the user's responsibility to make sure
         that the functions directory and the module are in sync.
 
         :param annotate: Should the function be annotated with the type hints? If they are included,
@@ -29,15 +44,15 @@ class Pyflow:
         :param path: Where should the module be saved?
         :return:
         """
-        if not os.path.exists(f"{self.path}/functions"):
-            os.makedirs(f"{self.path}/functions")
+        if not os.path.exists(self.get_function_path()):
+            os.makedirs(self.get_function_path())
 
         function_module = "class PyflowFn:\n"
         function_module += "    def __init__(self, pf):\n"
         function_module += "        self.pf = pf\n\n"
 
         for func in os.listdir(f"{self.path}/functions"):
-            metadata = json.loads(open(f"{self.path}/functions/{func}", "r").read())
+            metadata = json.loads(open(f"{self.get_function_path(func)}/meta.json", "r").read())
             variables = metadata["variables"]
             outer_vars = copy.deepcopy(variables)
             signature = metadata["signature"]
@@ -64,10 +79,12 @@ class Pyflow:
                 function_module += f"        \"\"\"{func}{signature}\"\"\"\n"
 
             function_module += f"        return self.pf.fn('{func}')({', '.join(outer_vars)})\n\n"
+        # TODO: write to pyflow directory and add to path
         open(path, "w").write(function_module)
 
-    @staticmethod
-    def build_conda_yml(runtime: RunTime, path="environment.yml"):
+    def build_conda_yml(self,
+                        funtion_name: str,
+                        runtime: RunTime):
         env = "name: env\n"
         env += "dependencies:\n"
         env += f"  - python={runtime.python_version.value}\n"
@@ -78,49 +95,36 @@ class Pyflow:
         env += "  - pip:\n"
         for dep in runtime.pip_dependencies:
             env += f"    - {dep}\n"
+        open(self.get_conda_env_path(funtion_name), "w").write(env)
 
-        open(path, "w").write(env)
-
-    def create_init_script(self):
-        # Create a script that will be run when the container starts. This script will
-        # activate the conda environment, install all the requirements and then run the
-        # function.
-        pass
-
-    @staticmethod
-    def build_dockerfile(container: Container, path="Dockerfile"):
+    def build_dockerfile(self, funtion_name: str, container: Container):
         """
         Is it necessary to build an image here...can't you just use the base image and run
         all the necessary install instructions from a script using the command function...
         """
         dockerfile = f"FROM {container.image}:{container.tag}\n"
-        # Use init script to install all the requirements and then run the function
-        # This means you can reuse a container for multiple runs, but will you have
-        # access to all the repos...tbd. The run will alos not be reproducable
-        # because the container will be updated with the latest packages.
-        dockerfile += "ADD environment.yml /tmp/environment.yml\n"
+        dockerfile += f"ADD {self.get_conda_env_path(funtion_name)} /tmp/environment.yml\n"
         dockerfile += "RUN conda env create -f /tmp/environment.yml\n"
         dockerfile += "RUN echo \"source activate env\" > ~/.bashrc\n"
         dockerfile += "ENV PATH /opt/conda/envs/env/bin:$PATH\n"
         dockerfile += "ADD $PWD/ /root/\n"
         dockerfile += "WORKDIR /root/\n"
         dockerfile += "RUN pip install -e .\n"
-        open(path, "w").write(dockerfile)
+        open(self.get_dockerfile_path(funtion_name), "w").write(dockerfile)
 
-    @staticmethod
-    def build_image(image_name: str,
-                    function_version: int,
+    def build_image(self,
+                    funtion_name: str,
                     runtime: RunTime,
                     container: Container):
-        Pyflow.build_conda_yml(runtime, path="environment.yml")
-        Pyflow.build_dockerfile(container, path="Dockerfile")
-        os.system(f"docker build -t {image_name}:{function_version} .")
+        self.build_conda_yml(funtion_name, runtime)
+        self.build_dockerfile(funtion_name, container)
+        os.system(f"docker build -t {funtion_name}:latest -f {self.path}/functions/{funtion_name}/Dockerfile .")
 
     def register(self,
-                 func,
-                 runtime: RunTime = None,
-                 container: Container = None,
-                 resources: Resources = None):
+                 func: callable,
+                 runtime: RunTime = RunTime(),
+                 container: Container = Container(),
+                 resources: Resources = Resources()):
         print(f"Registering variables: {func.__code__.co_varnames}")
         signature = inspect.signature(func)
         params = signature.parameters
@@ -136,10 +140,12 @@ class Pyflow:
             "container": container.model_dump(),
             "resources": resources.model_dump()
         }
-        open(f"{self.path}/functions/{func.__name__}", "w").write(json.dumps(metadata))
+
+        os.makedirs(self.get_function_path(func.__name__), exist_ok=True)
+        open(f"{self.get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
 
     def fn(self, func_name):
-        metadata = json.loads(open(f"{self.path}/functions/{func_name}", "r").read())
+        metadata = json.loads(open(f"{self.path}/functions/{func_name}/meta.json", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
         return func
 

@@ -27,3 +27,7 @@ variables along.  You could store the output format in the metadata, but this is
 
 Another problem is that not all code can be pickled. You might run into an issue where you cannot use it.
 
+Optional: Use init script to install all the requirements and then run the function
+This means you can reuse a container for multiple runs, but will you have
+access to all the repos...tbd. But the run will not be reproducible
+because the container will be updated with the latest packages.

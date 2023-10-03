@@ -2,7 +2,7 @@ from pydantic import BaseModel
 import enum
 
 
-class PythonVersion(enum.Enum):
+class PythonVersion(str, enum.Enum):
     v3_11: str = "3.11"
     v3_10: str = "3.10"
     v3_9: str = "3.9"
@@ -11,9 +11,9 @@ class PythonVersion(enum.Enum):
 
 class RunTime(BaseModel):
     python_version: PythonVersion = PythonVersion.v3_11
-    conda_dependencies: list[str]
-    pip_dependencies: list[str]
-    gpu: bool
+    conda_dependencies: list[str] = []
+    pip_dependencies: list[str] = []
+    gpu: bool = False
 
 
 class Container(BaseModel):
@@ -22,5 +22,5 @@ class Container(BaseModel):
 
 
 class Resources(BaseModel):
-    cpu: str
-    mem: str
+    cpu: str = "1"
+    mem: str = "1Gi"
