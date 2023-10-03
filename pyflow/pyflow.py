@@ -118,7 +118,7 @@ class Pyflow:
                     container: Container):
         self.build_conda_yml(funtion_name, runtime)
         self.build_dockerfile(funtion_name, container)
-        os.system(f"docker build -t {funtion_name}:latest -f {self.path}/functions/{funtion_name}/Dockerfile .")
+        os.system(f"docker build -t {funtion_name}:latest -f {self.get_dockerfile_path(funtion_name)} .")
 
     def register(self,
                  func: callable,
