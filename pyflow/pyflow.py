@@ -8,6 +8,7 @@ import codecs
 import inspect
 import hashlib
 from pyflow.config import RunTime, Container, Resources
+from pyflow.storage import PyflowStorageObject
 
 
 class Pyflow:
@@ -20,6 +21,9 @@ class Pyflow:
             return f"{self.path}/functions"
         else:
             return f"{self.path}/functions/{func_name}"
+
+    def get_function_storage_path(self, func_name=None):
+        return self.get_function_path(func_name) + "/storage.pkl"
 
     def get_conda_env_path(self, func_name=None):
         os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
@@ -143,28 +147,43 @@ class Pyflow:
         os.makedirs(self.get_function_path(func.__name__), exist_ok=True)
         open(f"{self.get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
 
-    @staticmethod
-    def containerize(func: callable):
+    def containerize(self, func_name: str):
         """
         This function will take a function and create a container for it. It will then
         return a new function that will run the container and execute the function.
 
-        :param func: The function to containerize.
+        :param func_name: The function to containerize.
         :return: A new function that will run the container and execute the function.
         """
 
         def containerized(*args, **kwargs):
-            command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func.__name__} python -c \"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{func.__name__}'){args}\""
+            command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func_name} python -c \"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{func_name}'){args}\""
             os.system(command)
+            return PyflowStorageObject(self.get_function_storage_path(func_name=func_name)).load()
+
         return containerized
 
     def get_fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}/meta.json", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
-        return func
+
+        def func_storage_wrapper(*args, **kwargs):
+            parsed_args = []
+            for arg in args:
+                if type(arg) == PyflowStorageObject:
+                    parsed_args.append(arg.load())
+                else:
+                    parsed_args.append(arg)
+            parsed_args = tuple(parsed_args)
+            outputs = func(*parsed_args, **kwargs)
+            storage_object = PyflowStorageObject(self.get_function_storage_path(func_name=func_name))
+            storage_object.dump(outputs)
+            return storage_object
+
+        return func_storage_wrapper
 
     def fn(self, func_name):
-        containerized = Pyflow.containerize(self.get_fn(func_name))
+        containerized = self.containerize(func_name)
         return containerized
 
     def register_module(self, module):
