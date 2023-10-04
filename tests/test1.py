@@ -12,7 +12,7 @@ def step1(x: int, y: int, z=1, *args, **kwargs) -> list:
 
 def step2(x) -> int:
     print(x)
-    return 2
+    return sum(x)
 
 
 pf.register_module(some_module)

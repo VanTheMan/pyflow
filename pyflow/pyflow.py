@@ -127,6 +127,7 @@ class Pyflow:
         signature = inspect.signature(func)
         params = signature.parameters
         metadata = {
+            "name": func.__name__,
             "code": inspect.getsource(func),
             "sha256": hashlib.sha256(inspect.getsource(func).encode()).hexdigest(),
             "signature": str(signature),
@@ -142,14 +143,29 @@ class Pyflow:
         os.makedirs(self.get_function_path(func.__name__), exist_ok=True)
         open(f"{self.get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
 
-    def fn(self, func_name):
+    @staticmethod
+    def containerize(func: callable):
+        """
+        This function will take a function and create a container for it. It will then
+        return a new function that will run the container and execute the function.
+
+        :param func: The function to containerize.
+        :return: A new function that will run the container and execute the function.
+        """
+
+        def containerized(*args, **kwargs):
+            command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func.__name__} python -c \"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{func.__name__}'){args}\""
+            os.system(command)
+        return containerized
+
+    def get_fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}/meta.json", "r").read())
         func = cloudpickle.loads(codecs.decode(metadata["pickle"].encode(), "base64"))
         return func
 
-    def execute(self, func_name, *args, **kwargs):
-        command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func_name} python -c \"from pyflow.pyflow import Pyflow; Pyflow().fn('{func_name}'){args}\""
-        os.system(command)
+    def fn(self, func_name):
+        containerized = Pyflow.containerize(self.get_fn(func_name))
+        return containerized
 
     def register_module(self, module):
         cloudpickle.register_pickle_by_value(module)

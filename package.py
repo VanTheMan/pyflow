@@ -11,4 +11,5 @@ rt = RunTime(
 )
 
 pf.build_image("step1", rt, Container())
-pf.execute("step1", 1, 2, 3)
+pf.build_image("step2", rt, Container())
+pf.fn("step2")(pf.fn("step1")(1, 2, 3))
