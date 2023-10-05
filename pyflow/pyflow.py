@@ -1,4 +1,5 @@
 import copy
+import time
 
 import cloudpickle
 import json
@@ -15,6 +16,7 @@ class Pyflow:
 
     def __init__(self, path: str = ".pyflow"):
         self.path = f"{Path.home()}/{path}"
+        self.executions = []
 
     def get_function_path(self, func_name=None):
         if func_name is None:
@@ -22,8 +24,9 @@ class Pyflow:
         else:
             return f"{self.path}/functions/{func_name}"
 
-    def get_function_storage_path(self, func_name=None):
-        return self.get_function_path(func_name) + "/storage.pkl"
+    def get_function_storage_path(self, func_name=None, execution_id=None):
+        os.makedirs(self.get_function_path(func_name) + f"/{execution_id}", exist_ok=True)
+        return self.get_function_path(func_name) + f"/{execution_id}/storage.pkl"
 
     def get_conda_env_path(self, func_name=None):
         os.makedirs(f".pyflow/functions/{func_name}", exist_ok=True)
@@ -146,22 +149,43 @@ class Pyflow:
 
         os.makedirs(self.get_function_path(func.__name__), exist_ok=True)
         open(f"{self.get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
+        # Figure out how to build from .pyflow directory
+        # Might need to have more than one docker context?
+        # self.build_image(func.__name__, runtime, container)
 
-    def containerize(self, func_name: str):
-        """
-        This function will take a function and create a container for it. It will then
-        return a new function that will run the container and execute the function.
+    class FnStub:
 
-        :param func_name: The function to containerize.
-        :return: A new function that will run the container and execute the function.
-        """
+        def __init__(self, func_name, execution_id, output_path, *args, **kwargs):
+            self.func_name = func_name
+            self.args = args
+            self.kwargs = kwargs
+            self.execution_id = execution_id
+            self.output_path = output_path
 
-        def containerized(*args, **kwargs):
-            command = f"docker run -v $HOME/.pyflow:/root/.pyflow {func_name} python -c \"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{func_name}'){args}\""
+    def schedule(self, func_name: str):
+
+        def schedule_wrapper(*args, **kwargs):
+            execution_id = time.time_ns()
+            output_path = self.get_function_storage_path(func_name, execution_id)
+            stub = self.FnStub(func_name, execution_id, output_path, *args, **kwargs)
+            self.executions.append(stub)
+            return output_path
+
+        return schedule_wrapper
+
+    def execute(self):
+        for execution in self.executions:
+            parsed_args = ", ".join([str(arg) for arg in execution.args])
+            # if len(execution.kwargs) > 0:
+                # parsed_args += ", "
+                # TODO fix kwargs = None
+                # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
+            parsed_args += f", execution_id={execution.execution_id}"
+
+            inline_python = f"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{execution.func_name}')({parsed_args})"
+
+            command = f"docker run -v $HOME/.pyflow:/root/.pyflow {execution.func_name} python -c \"{inline_python}\""
             os.system(command)
-            return PyflowStorageObject(self.get_function_storage_path(func_name=func_name)).load()
-
-        return containerized
 
     def get_fn(self, func_name):
         metadata = json.loads(open(f"{self.path}/functions/{func_name}/meta.json", "r").read())
@@ -170,21 +194,22 @@ class Pyflow:
         def func_storage_wrapper(*args, **kwargs):
             parsed_args = []
             for arg in args:
-                if type(arg) == PyflowStorageObject:
-                    parsed_args.append(arg.load())
+                if type(arg) == str and ".pyflow/" in arg:
+                    parsed_args.append(PyflowStorageObject(arg).load())
                 else:
                     parsed_args.append(arg)
             parsed_args = tuple(parsed_args)
+            execution_id = kwargs.pop("execution_id")
             outputs = func(*parsed_args, **kwargs)
-            storage_object = PyflowStorageObject(self.get_function_storage_path(func_name=func_name))
+            storage_object = PyflowStorageObject(self.get_function_storage_path(func_name, execution_id))
             storage_object.dump(outputs)
+            # TODO: Add return type meta data
             return storage_object
 
         return func_storage_wrapper
 
     def fn(self, func_name):
-        containerized = self.containerize(func_name)
-        return containerized
+        return self.schedule(func_name)
 
     def register_module(self, module):
         cloudpickle.register_pickle_by_value(module)

@@ -25,11 +25,18 @@ def bla(x: str,
 # print(bla.__annotations__)
 # print(bla.__annotations__["return"])
 # print(inspect.getsource(bla))
-print(type(bla))
-# print(inspect.signature(bla).parameters)
+# print(type(bla))
+print(inspect.signature(bla))
 # params = inspect.signature(bla).parameters
 # print(next(params))
 # print([params[param].default for param in params])
 # print([str(params[param].default) != "<class 'inspect._empty'>" for param in params],)
 # print(params["z"])
 
+
+# signature = inspect.signature(bla)
+# params = signature.parameters
+variables = bla.__code__.co_varnames
+# is_kwarg = [str(params[param].default) != "<class 'inspect._empty'>" for param in params]
+
+print(variables)
