@@ -11,4 +11,4 @@ list(map(pfn.step2, [pfn.step1(1, 2), pfn.step1(3, 4)]))
 
 pf.execute()
 
-print(PyflowStorageObject(pf.executions[-1].path).load())
+print(PyflowStorageObject(pf.executions[-1].output_path).load())

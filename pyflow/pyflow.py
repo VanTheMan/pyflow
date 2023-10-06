@@ -201,8 +201,9 @@ class Pyflow:
         def func_storage_wrapper(*args, **kwargs):
             parsed_args = []
             for arg in args:
+
                 if type(arg) == str and ".pyflow/" in arg:
-                    parsed_args.append(PyflowStorageObject(arg).load())
+                    parsed_args.append(PyflowStorageObject(arg.replace("/Users/vanzyl", "/root")).load())
                 else:
                     parsed_args.append(arg)
             parsed_args = tuple(parsed_args)
