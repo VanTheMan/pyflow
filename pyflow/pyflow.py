@@ -12,11 +12,21 @@ from pyflow.config import RunTime, Container, Resources
 from pyflow.storage import PyflowStorageObject
 
 
+class FnStub:
+
+    def __init__(self, func_name, execution_id, output_path, *args, **kwargs):
+        self.func_name = func_name
+        self.args = args
+        self.kwargs = kwargs
+        self.execution_id = execution_id
+        self.output_path = output_path
+
+
 class Pyflow:
 
     def __init__(self, path: str = ".pyflow"):
         self.path = f"{Path.home()}/{path}"
-        self.executions = []
+        self.executions: list[FnStub] = []
 
     def get_function_path(self, func_name=None):
         if func_name is None:
@@ -153,21 +163,12 @@ class Pyflow:
         # Might need to have more than one docker context?
         # self.build_image(func.__name__, runtime, container)
 
-    class FnStub:
-
-        def __init__(self, func_name, execution_id, output_path, *args, **kwargs):
-            self.func_name = func_name
-            self.args = args
-            self.kwargs = kwargs
-            self.execution_id = execution_id
-            self.output_path = output_path
-
     def schedule(self, func_name: str):
 
         def schedule_wrapper(*args, **kwargs):
             execution_id = time.time_ns()
             output_path = self.get_function_storage_path(func_name, execution_id)
-            stub = self.FnStub(func_name, execution_id, output_path, *args, **kwargs)
+            stub = FnStub(func_name, execution_id, output_path, *args, **kwargs)
             self.executions.append(stub)
             return output_path
 
@@ -175,15 +176,21 @@ class Pyflow:
 
     def execute(self):
         for execution in self.executions:
-            parsed_args = ", ".join([str(arg) for arg in execution.args])
+            parsed_args = ""
+            for arg in execution.args:
+                if type(arg) == str:
+                    parsed_args += f"\'{arg}\', "
+                else:
+                    parsed_args += f"{arg}, "
+
+            print(f"{parsed_args}")
+
             # if len(execution.kwargs) > 0:
-                # parsed_args += ", "
-                # TODO fix kwargs = None
-                # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
-            parsed_args += f", execution_id={execution.execution_id}"
+            # TODO fix kwargs = None
+            # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
 
+            parsed_args += f"execution_id={execution.execution_id}"
             inline_python = f"from pyflow.pyflow import Pyflow; Pyflow().get_fn('{execution.func_name}')({parsed_args})"
-
             command = f"docker run -v $HOME/.pyflow:/root/.pyflow {execution.func_name} python -c \"{inline_python}\""
             os.system(command)
 
