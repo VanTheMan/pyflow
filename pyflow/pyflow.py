@@ -15,9 +15,30 @@ STORAGE_OBJECT_PREFIX = "PYFLOW_OBJECT_"
 PYFLOW_HOME = os.getenv("PYFLOW_HOME", f"{Path.home()}/.pyflow")
 
 
+class OutputPath:
+
+    def __init__(self, path):
+        self.base_path = path.replace(STORAGE_OBJECT_PREFIX, '').replace(PYFLOW_HOME, '')
+
+    def __str__(self):
+        return STORAGE_OBJECT_PREFIX + self.base_path
+
+    def full_path(self):
+        return PYFLOW_HOME + self.base_path
+
+    @staticmethod
+    def check(path):
+        """
+        Check if the path is an output path.
+        :param path:
+        :return:
+        """
+        return STORAGE_OBJECT_PREFIX in path
+
+
 class FnStub:
 
-    def __init__(self, func_name, execution_id, output_path, *args, **kwargs):
+    def __init__(self, func_name, execution_id, output_path: OutputPath, *args, **kwargs):
         self.func_name = func_name
         self.args = args
         self.kwargs = kwargs
@@ -26,7 +47,7 @@ class FnStub:
 
     @property
     def output_path(self):
-        return f"{PYFLOW_HOME}/{self._output_path.replace(STORAGE_OBJECT_PREFIX, '')}"
+        return self._output_path.full_path()
 
 
 class Pyflow:
@@ -42,30 +63,25 @@ class Pyflow:
         os.makedirs(path, exist_ok=True)
         return path
 
-    def _get_function_path(self, func_name=None, add_home_dir=True):
-        """
-        Add home path here is optional, because when you pass this as a parameter to
-        within the docker container the home path will be different.
-
-        :param func_name:
-        :return:
-        """
+    def _get_base_function_path(self, func_name=None):
         if func_name is None:
-            return self._check_path(self._add_home_dir("functions")) if add_home_dir else "functions"
+            return "functions"
         else:
-            return self._check_path(
-                self._add_home_dir(f"functions/{func_name}")) if add_home_dir else f"functions/{func_name}"
+            return f"functions/{func_name}"
 
-    def _get_function_storage_path(self, func_name=None, execution_id=None, add_home_dir=True):
-        path = self._check_path(f"{self._get_function_path(func_name, add_home_dir)}/{execution_id}")
+    def _get_function_path(self, func_name=None):
+        return self._check_path(self._add_home_dir(self._get_base_function_path(func_name)))
+
+    def _get_function_storage_path(self, func_name=None, execution_id=None):
+        path = self._check_path(f"{self._get_function_path(func_name)}/{execution_id}")
         return path + "/storage.pkl"
 
     def _get_conda_env_path(self, func_name=None):
-        path = self._check_path(".pyflow/" + self._get_function_path(func_name, False))
+        path = self._check_path(".pyflow/" + self._get_function_path(func_name))
         return path + "/environment.yml"
 
     def _get_dockerfile_path(self, func_name=None):
-        path = self._check_path(".pyflow/" + self._get_function_path(func_name, False))
+        path = self._check_path(".pyflow/" + self._get_function_path(func_name))
         return path + "/Dockerfile"
 
     def load_functions(self, annotate=False, path="pyflow_functions.py"):
@@ -187,7 +203,7 @@ class Pyflow:
             parsed_args = ""
             for arg in execution.args:
                 # Add quotes around strings
-                parsed_args += f"\'{arg}\', " if type(arg) == str else f"{arg}, "
+                parsed_args += f"\'{arg}\', " if type(arg) == str or type(arg) == OutputPath else f"{arg}, "
 
             # TODO fix kwargs = None
             # if len(execution.kwargs) > 0:
@@ -218,15 +234,15 @@ class Pyflow:
         def func_storage_wrapper(*args, **kwargs):
             parsed_args = []
             for arg in args:
-                if type(arg) == str and STORAGE_OBJECT_PREFIX in arg:
+                if type(arg) == str and OutputPath.check(arg):
                     parsed_args.append(
-                        PyflowStorageObject(self.flow_home_path + f"/{arg.replace(STORAGE_OBJECT_PREFIX, '')}").load())
+                        PyflowStorageObject(OutputPath(arg).full_path()).load())
                 else:
                     parsed_args.append(arg)
             parsed_args = tuple(parsed_args)
             execution_id = os.getenv("EXECUTION_ID")
             outputs = func(*parsed_args, **kwargs)
-            storage_object = PyflowStorageObject(self._get_function_storage_path(func_name, execution_id, True))
+            storage_object = PyflowStorageObject(self._get_function_storage_path(func_name, execution_id))
             storage_object.dump(outputs)
             # TODO: Add return type meta data
             return storage_object
@@ -253,7 +269,7 @@ class Pyflow:
                 another function call.
             """
             execution_id = time.time_ns()
-            output_path = STORAGE_OBJECT_PREFIX + self._get_function_storage_path(func_name, execution_id, False)
+            output_path = OutputPath(self._get_function_storage_path(func_name, execution_id))
             stub = FnStub(func_name, execution_id, output_path, *args, **kwargs)
             self.executions.append(stub)
             return output_path
