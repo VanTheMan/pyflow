@@ -171,32 +171,35 @@ class Pyflow:
         os.system(f"docker build -t {funtion_name}:latest -f {self._get_dockerfile_path(funtion_name)} .")
 
     def register(self,
-                 func: callable,
                  runtime: RunTime = RunTime(),
                  container: Container = Container(),
                  resources: Resources = Resources()):
-        print(f"Registering variables: {func.__code__.co_varnames}")
-        signature = inspect.signature(func)
-        params = signature.parameters
-        metadata = {
-            "name": func.__name__,
-            "code": inspect.getsource(func),
-            "sha256": hashlib.sha256(inspect.getsource(func).encode()).hexdigest(),
-            "signature": str(signature),
-            "variables": func.__code__.co_varnames,
-            "annotations": str(func.__annotations__),
-            "is_kwarg": [str(params[param].default) != "<class 'inspect._empty'>" for param in params],
-            "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
-            "runtime": runtime.model_dump(),
-            "container": container.model_dump(),
-            "resources": resources.model_dump()
-        }
+        def decorator(func):
+            print(f"Registering variables: {func.__code__.co_varnames}")
+            signature = inspect.signature(func)
+            params = signature.parameters
+            metadata = {
+                "name": func.__name__,
+                "code": inspect.getsource(func),
+                "sha256": hashlib.sha256(inspect.getsource(func).encode()).hexdigest(),
+                "signature": str(signature),
+                "variables": func.__code__.co_varnames,
+                "annotations": str(func.__annotations__),
+                "is_kwarg": [str(params[param].default) != "<class 'inspect._empty'>" for param in params],
+                "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
+                "runtime": runtime.model_dump(),
+                "container": container.model_dump(),
+                "resources": resources.model_dump()
+            }
 
-        os.makedirs(self._get_function_path(func.__name__), exist_ok=True)
-        open(f"{self._get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
-        # Figure out how to build from .pyflow directory
-        # Might need to have more than one docker context?
-        # self.build_image(func.__name__, runtime, container)
+            os.makedirs(self._get_function_path(func.__name__), exist_ok=True)
+            open(f"{self._get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
+            # Figure out how to build from .pyflow directory
+            # Might need to have more than one docker context?
+            self.build_image(func.__name__, runtime, container)
+            return self.fn(func.__name__)
+
+        return decorator
 
     def execute(self):
         for execution in self.executions:
