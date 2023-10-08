@@ -186,18 +186,23 @@ class Pyflow:
         for execution in self.executions:
             parsed_args = ""
             for arg in execution.args:
-                if type(arg) == str:
-                    parsed_args += f"\'{arg}\', "
-                else:
-                    parsed_args += f"{arg}, "
+                # Add quotes around strings
+                parsed_args += f"\'{arg}\', " if type(arg) == str else f"{arg}, "
 
             # TODO fix kwargs = None
             # if len(execution.kwargs) > 0:
             # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
 
-            inline_python = f"from pyflow.pyflow import Pyflow; Pyflow().load_fn('{execution.func_name}')({parsed_args})"
-            command = f"docker run -v $HOME/.pyflow:/root/.pyflow -e EXECUTION_ID={execution.execution_id} {execution.func_name} python -c \"{inline_python}\""
-            os.system(command)
+            docker_command = f"docker run "
+            docker_command += f"-v $HOME/.pyflow:/root/.pyflow "
+            docker_command += f"-e EXECUTION_ID={execution.execution_id} "
+            docker_command += f"{execution.func_name} "
+
+            inline_python = f"from pyflow.pyflow import Pyflow; "
+            inline_python += f"Pyflow().load_fn('{execution.func_name}')({parsed_args}); "
+
+            docker_command += f"python -c \"{inline_python}\""
+            os.system(docker_command)
 
     def load_fn(self, func_name):
         """
