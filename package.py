@@ -1,10 +1,10 @@
 from pyflow.pyflow import Pyflow
 import tests.some_module as some_module
-from pyflow.config import RunTime, PythonVersion, Container
+from pyflow.config import PyFlowRunTime, PythonVersion, PyFlowContainer
 
 pf = Pyflow()
 
-rt = RunTime(
+rt = PyFlowRunTime(
     python_version=PythonVersion.v3_11,
     conda_dependencies=["pandas"],
     pip_dependencies=["numpy"],

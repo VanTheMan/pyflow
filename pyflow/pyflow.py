@@ -8,8 +8,9 @@ from pathlib import Path
 import codecs
 import inspect
 import hashlib
-from pyflow.config import RunTime, Container, Resources
+from pyflow.config import PyFlowRunTime, PyFlowContainer, PyFlowResources
 from pyflow.storage import PyflowStorageObject
+from hera.workflows import Steps, Workflow, WorkflowsService, Container, HostPathVolume
 
 STORAGE_OBJECT_PREFIX = "PYFLOW_OBJECT_"
 PYFLOW_HOME = os.getenv("PYFLOW_HOME", f"{Path.home()}/.pyflow")
@@ -134,7 +135,7 @@ class Pyflow:
 
     def _build_conda_yml(self,
                          funtion_name: str,
-                         runtime: RunTime):
+                         runtime: PyFlowRunTime):
         env = "name: env\n"
         env += "dependencies:\n"
         env += f"  - python={runtime.python_version.value}\n"
@@ -147,7 +148,7 @@ class Pyflow:
             env += f"    - {dep}\n"
         open(self._get_conda_env_path(funtion_name), "w").write(env)
 
-    def _build_dockerfile(self, funtion_name: str, container: Container):
+    def _build_dockerfile(self, funtion_name: str, container: PyFlowContainer):
         """
         Is it necessary to build an image here...can't you just use the base image and run
         all the necessary install instructions from a script using the command function...
@@ -164,16 +165,16 @@ class Pyflow:
 
     def build_image(self,
                     funtion_name: str,
-                    runtime: RunTime,
-                    container: Container):
+                    runtime: PyFlowRunTime,
+                    container: PyFlowContainer):
         self._build_conda_yml(funtion_name, runtime)
         self._build_dockerfile(funtion_name, container)
         os.system(f"docker build -t {funtion_name}:latest -f {self._get_dockerfile_path(funtion_name)} .")
 
     def register(self,
-                 runtime: RunTime = RunTime(),
+                 runtime: PyFlowRunTime = PyFlowRunTime(),
                  container: Container = Container(),
-                 resources: Resources = Resources()):
+                 resources: PyFlowResources = PyFlowResources()):
         def decorator(func):
             print(f"Registering variables: {func.__code__.co_varnames}")
             signature = inspect.signature(func)
@@ -201,27 +202,54 @@ class Pyflow:
 
         return decorator
 
-    def execute(self):
-        for execution in self.executions:
-            parsed_args = ""
-            for arg in execution.args:
-                # Add quotes around strings
-                parsed_args += f"\'{arg}\', " if type(arg) == str or type(arg) == OutputPath else f"{arg}, "
+    def execute(self, workflow_name="pyflow"):
+        with Workflow(
+                generate_name="hello-world-",
+                entrypoint="steps",
+                namespace="argo",
+                workflows_service=WorkflowsService(host="https://localhost:2746", verify_ssl=False),
+                volumes=[HostPathVolume(
+                    name="pyflow",
+                    path="$HOME/.pyflow",
+                    type="Directory"
+                )]
+        ) as w:
+            with Steps(name="steps"):
 
-            # TODO fix kwargs = None
-            # if len(execution.kwargs) > 0:
-            # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
+                for execution in self.executions:
 
-            docker_command = f"docker run "
-            docker_command += f"-v $HOME/.pyflow:/root/.pyflow "
-            docker_command += f"-e EXECUTION_ID={execution.execution_id} "
-            docker_command += f"{execution.func_name} "
+                    parsed_args = ""
+                    for arg in execution.args:
+                        # Add quotes around strings
+                        parsed_args += f"\'{arg}\', " if type(arg) == str or type(arg) == OutputPath else f"{arg}, "
 
-            inline_python = f"from pyflow.pyflow import Pyflow; "
-            inline_python += f"Pyflow().load_fn('{execution.func_name}')({parsed_args}); "
+                    # TODO fix kwargs = None
+                    # if len(execution.kwargs) > 0:
+                    # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
 
-            docker_command += f"python -c \"{inline_python}\""
-            os.system(docker_command)
+                    docker_command = f"docker run "
+                    docker_command += f"-v $HOME/.pyflow:/root/.pyflow "
+                    docker_command += f"-e EXECUTION_ID={execution.execution_id} "
+                    docker_command += f"{execution.func_name} "
+
+                    # Add resource usage
+
+                    inline_python = f"from pyflow.pyflow import Pyflow; "
+                    inline_python += f"Pyflow().load_fn('{execution.func_name}')({parsed_args}); "
+
+                    docker_command += f"python -c"
+                    # os.system(f"{docker_command} \"{inline_python}\"")
+
+                    Container(
+                        image=f"execution.func_name:latest",
+                        command=[docker_command.split(",")],
+                        args=[inline_python],
+                        volume_mounts=[{
+                            "name": "pyflow",
+                            "mount_path": "/root/.pyflow",
+                        }],
+
+                    )
 
     def load_fn(self, func_name):
         """

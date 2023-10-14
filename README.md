@@ -2,8 +2,17 @@
 - https://docs.anaconda.com/free/anaconda/applications/docker/
 - https://stackoverflow.com/questions/30469575/how-to-pickle-and-unpickle-to-portable-string-in-python-3
 - https://stackoverflow.com/questions/15200048/how-to-get-the-parameters-type-and-return-type-of-a-function
+- https://minikube.sigs.k8s.io/docs/start/
+- https://argoproj.github.io/argo-workflows/quick-start/
+- https://stackoverflow.com/questions/48534980/mount-local-directory-into-pod-in-minikube
 
 # Instructions
+
+```shell
+minikube dashboard
+kubectl -n argo port-forward deployment/argo-server 2746:2746
+```
+
 ```python
 docker build . -t conda
 docker run -it -v $HOME/.pyflow:/root/.pyflow conda bash

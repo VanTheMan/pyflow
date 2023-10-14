@@ -9,18 +9,18 @@ class PythonVersion(str, enum.Enum):
     v3_8: str = "3.8"
 
 
-class RunTime(BaseModel):
+class PyFlowRunTime(BaseModel):
     python_version: PythonVersion = PythonVersion.v3_11
     conda_dependencies: list[str] = []
     pip_dependencies: list[str] = []
     gpu: bool = False
 
 
-class Container(BaseModel):
+class PyFlowContainer(BaseModel):
     image: str = "continuumio/miniconda3"
     tag: str = "latest"
 
 
-class Resources(BaseModel):
+class PyFlowResources(BaseModel):
     cpu: str = "1"
     mem: str = "1Gi"
