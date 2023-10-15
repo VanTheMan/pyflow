@@ -5,10 +5,15 @@
 - https://minikube.sigs.k8s.io/docs/start/
 - https://argoproj.github.io/argo-workflows/quick-start/
 - https://stackoverflow.com/questions/48534980/mount-local-directory-into-pod-in-minikube
+- https://thospfuller.com/2020/12/09/learn-how-to-mount-a-local-drive-in-a-pod-in-minikube-2021/
+- https://stackoverflow.com/questions/42564058/how-to-use-local-docker-images-with-minikube
+- https://minikube.sigs.k8s.io/docs/handbook/pushing/#1-pushing-directly-to-the-in-cluster-docker-daemon-docker-env
 
 # Instructions
 
 ```shell
+minikube start
+minikube mount $HOME/.pyflow:/.pyflow &
 minikube dashboard
 kubectl -n argo port-forward deployment/argo-server 2746:2746
 ```

@@ -10,11 +10,11 @@ import inspect
 import hashlib
 from pyflow.config import PyFlowRunTime, PyFlowContainer, PyFlowResources
 from pyflow.storage import PyflowStorageObject
-from hera.workflows import Steps, Workflow, WorkflowsService, Container, HostPathVolume
+from hera.workflows import Steps, Workflow, WorkflowsService, Container, HostPathVolume, Env
 
 STORAGE_OBJECT_PREFIX = "PYFLOW_OBJECT_"
 PYFLOW_HOME = os.getenv("PYFLOW_HOME", f"{Path.home()}/.pyflow")
-
+ARGO_HOST = os.getenv("ARGO_URL", "https://localhost:2746")
 
 class OutputPath:
 
@@ -56,6 +56,7 @@ class Pyflow:
     def __init__(self):
         self.flow_home_path = PYFLOW_HOME
         self.executions: list[FnStub] = []
+        self.containers: list[Container] = []
 
     def _add_home_dir(self, path):
         return f"{self.flow_home_path}/{path}"
@@ -166,15 +167,24 @@ class Pyflow:
     def build_image(self,
                     funtion_name: str,
                     runtime: PyFlowRunTime,
-                    container: PyFlowContainer):
+                    container: PyFlowContainer,
+                    local=False):
         self._build_conda_yml(funtion_name, runtime)
         self._build_dockerfile(funtion_name, container)
-        os.system(f"docker build -t {funtion_name}:latest -f {self._get_dockerfile_path(funtion_name)} .")
+        if local:
+            # Add eval $(minikube docker-env) when running locally on minikube
+            # i.e. pushing to in cluster deamon
+            # https://minikube.sigs.k8s.io/docs/handbook/pushing/#1-pushing-directly-to-the-in-cluster-docker-daemon-docker-env
+            os.system(
+                f"eval $(minikube docker-env) && docker build -t {funtion_name}:latest -f {self._get_dockerfile_path(funtion_name)} .")
+        else:
+            os.system(f"docker build -t {funtion_name}:latest -f {self._get_dockerfile_path(funtion_name)} .")
 
     def register(self,
                  runtime: PyFlowRunTime = PyFlowRunTime(),
-                 container: Container = Container(),
-                 resources: PyFlowResources = PyFlowResources()):
+                 container: Container = PyFlowContainer(),
+                 resources: PyFlowResources = PyFlowResources(),
+                 local=False):
         def decorator(func):
             print(f"Registering variables: {func.__code__.co_varnames}")
             signature = inspect.signature(func)
@@ -188,68 +198,80 @@ class Pyflow:
                 "annotations": str(func.__annotations__),
                 "is_kwarg": [str(params[param].default) != "<class 'inspect._empty'>" for param in params],
                 "pickle": codecs.encode(cloudpickle.dumps(func), "base64").decode(),
-                "runtime": runtime.model_dump(),
-                "container": container.model_dump(),
-                "resources": resources.model_dump()
+                "runtime": runtime.dict(),
+                "container": container.dict(),
+                "resources": resources.dict()
             }
 
             os.makedirs(self._get_function_path(func.__name__), exist_ok=True)
             open(f"{self._get_function_path(func.__name__)}/meta.json", "w").write(json.dumps(metadata))
             # Figure out how to build from .pyflow directory
             # Might need to have more than one docker context?
-            self.build_image(func.__name__, runtime, container)
+            self.build_image(func.__name__, runtime, container, local=local)
             return self.fn(func.__name__)
 
         return decorator
 
-    def execute(self, workflow_name="pyflow"):
+    def _create_containers(self, local=False):
+        for execution in self.executions:
+
+            parsed_args = ""
+            for arg in execution.args:
+                # Add quotes around strings
+                parsed_args += f"\'{arg}\', " if type(arg) == str or type(arg) == OutputPath else f"{arg}, "
+
+            # TODO fix kwargs = None
+            # if len(execution.kwargs) > 0:
+            # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
+
+            docker_command = f"docker run "
+            docker_command += f"-v $HOME/.pyflow:/root/.pyflow "
+            docker_command += f"-e EXECUTION_ID={execution.execution_id} "
+            docker_command += f"{execution.func_name} "
+
+            # TODO: Add resource usage
+
+            inline_python = f"from pyflow.pyflow import Pyflow; "
+            inline_python += f"Pyflow().load_fn('{execution.func_name}')({parsed_args}); "
+
+            docker_command += f"python -c"
+            # os.system(f"{docker_command} \"{inline_python}\"")
+
+            c = Container(
+                name=f"{execution.func_name}-{execution.execution_id}",
+                # You need to add the docker.io/library/ prefix when running locally wih minikube
+                image=f"docker.io/library/{execution.func_name}:latest" if local else f"{execution.func_name}:latest",
+                command=["python", "-c"],
+                args=[inline_python],
+                volume_mounts=[{
+                    "name": "pyflow",
+                    "mount_path": "/root/.pyflow",
+                }],
+                env=[Env(name="EXECUTION_ID", value=execution.execution_id)],
+                # This is only for local execution
+                image_pull_policy="never" if local else "Always"
+            )
+            self.containers.append(c)
+
+    def execute(self, workflow_name="pyflow", local=False):
         with Workflow(
-                generate_name="hello-world-",
+                generate_name="pyflow-",
                 entrypoint="steps",
                 namespace="argo",
-                workflows_service=WorkflowsService(host="https://localhost:2746", verify_ssl=False),
+                workflows_service=WorkflowsService(host=ARGO_HOST, verify_ssl=False),
                 volumes=[HostPathVolume(
                     name="pyflow",
-                    path="$HOME/.pyflow",
+                    path="/.pyflow",
                     type="Directory"
-                )]
+                )] if local else None
         ) as w:
-            with Steps(name="steps"):
+            self._create_containers(local=local)
+            with Steps(name="steps") as s:
+                for c in self.containers:
+                    c(name=c.name)
 
-                for execution in self.executions:
-
-                    parsed_args = ""
-                    for arg in execution.args:
-                        # Add quotes around strings
-                        parsed_args += f"\'{arg}\', " if type(arg) == str or type(arg) == OutputPath else f"{arg}, "
-
-                    # TODO fix kwargs = None
-                    # if len(execution.kwargs) > 0:
-                    # parsed_args += ", ".join([f"{k}={v}" for k, v in execution.kwargs.items()])
-
-                    docker_command = f"docker run "
-                    docker_command += f"-v $HOME/.pyflow:/root/.pyflow "
-                    docker_command += f"-e EXECUTION_ID={execution.execution_id} "
-                    docker_command += f"{execution.func_name} "
-
-                    # Add resource usage
-
-                    inline_python = f"from pyflow.pyflow import Pyflow; "
-                    inline_python += f"Pyflow().load_fn('{execution.func_name}')({parsed_args}); "
-
-                    docker_command += f"python -c"
-                    # os.system(f"{docker_command} \"{inline_python}\"")
-
-                    Container(
-                        image=f"execution.func_name:latest",
-                        command=[docker_command.split(",")],
-                        args=[inline_python],
-                        volume_mounts=[{
-                            "name": "pyflow",
-                            "mount_path": "/root/.pyflow",
-                        }],
-
-                    )
+        w.create()
+        w.wait()
 
     def load_fn(self, func_name):
         """
