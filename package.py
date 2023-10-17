@@ -27,7 +27,5 @@ def step2(x) -> int:
     return x + 1
 
 
-# pf.fn("step1")(1, 2)
-# pf.fn("step2")(pf.fn("step1")(1, 2))
 step2(step2(step1(1, 2)))
 pf.execute(local=True)

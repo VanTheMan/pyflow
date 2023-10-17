@@ -16,6 +16,7 @@ STORAGE_OBJECT_PREFIX = "PYFLOW_OBJECT_"
 PYFLOW_HOME = os.getenv("PYFLOW_HOME", f"{Path.home()}/.pyflow")
 ARGO_HOST = os.getenv("ARGO_URL", "https://localhost:2746")
 
+
 class OutputPath:
 
     def __init__(self, path):
